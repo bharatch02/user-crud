@@ -1,5 +1,5 @@
 {
-  "name": "ytbackend",
+  "name": "user-crud",
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
