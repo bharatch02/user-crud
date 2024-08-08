@@ -1,49 +1,119 @@
 const express = require('express');
-const app = express();
 const path = require('path');
-const userModel = require('./models/user')
+const userModel = require('./models/user');
+const bodyParser = require('body-parser'); // For additional parsing needs
+const { body, validationResult } = require('express-validator'); // For input validation
 
-app.set("view engine", "ejs")
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware setup
+app.set("view engine", "ejs");
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json()); // Additional parsing if needed
 
-app.get('/', (req,res) => {
+// Route: Home
+app.get('/', (req, res) => {
     res.render("index");
-})
+});
 
-app.get('/read',async (req,res) => {
-    let users = await userModel.find()
-    res.render("read", {users});
-})
+// Route: Read Users
+app.get('/read', async (req, res) => {
+    try {
+        let users = await userModel.find();
+        res.render("read", { users });
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-app.get('/edit/:userid',async (req,res) => {
-    let user = await userModel.findOne({_id: req.params.userid})
-    res.render("edit", {user});
-})
+// Route: Edit User
+app.get('/edit/:userid', async (req, res) => {
+    try {
+        let user = await userModel.findOne({ _id: req.params.userid });
+        if (!user) {
+            return res.status(404).send('User not found');
+        }
+        res.render("edit", { user });
+    } catch (error) {
+        console.error('Error fetching user:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-app.post('/update/:id',async (req,res) => {
-    let {name, email, image} = req.body;
+// Route: Update User
+app.post('/update/:id', [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('image').optional().isURL().withMessage('Image URL must be valid')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).render('edit', { user: req.body, errors: errors.array() });
+    }
 
-    let user = await userModel.findOneAndUpdate({_id: req.params.id}, {image, name, email}, {new: true})
-    res.redirect("/read");
-})
+    try {
+        let { name, email, image } = req.body;
+        let user = await userModel.findOneAndUpdate(
+            { _id: req.params.id },
+            { image, name, email },
+            { new: true }
+        );
+        if (!user) {
+            return res.status(404).send('User not found');
+        }
+        res.redirect("/read");
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-app.get('/delete/:id',async (req,res) => {
-    let users = await userModel.findOneAndDelete({_id: req.params.id})
-    res.redirect("/read");
-})
+// Route: Delete User
+app.get('/delete/:id', async (req, res) => {
+    try {
+        let user = await userModel.findOneAndDelete({ _id: req.params.id });
+        if (!user) {
+            return res.status(404).send('User not found');
+        }
+        res.redirect("/read");
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-app.post('/create', async (req,res) => {
-    let {name, email, image} = req.body;
+// Route: Create User
+app.post('/create', [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('image').optional().isURL().withMessage('Image URL must be valid')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).render('index', { errors: errors.array() });
+    }
 
-    let createdUser = await userModel.create({
-        name,
-        email,
-        image
-    })
+    try {
+        let { name, email, image } = req.body;
+        let createdUser = await userModel.create({ name, email, image });
+        res.redirect("/read");
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-    res.redirect("/read");
-})
+// Error Handling Middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
 
-app.listen(3000);
+// Start the Server
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
